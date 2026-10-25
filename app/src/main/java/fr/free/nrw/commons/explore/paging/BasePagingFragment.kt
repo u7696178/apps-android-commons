@@ -96,6 +96,16 @@ abstract class BasePagingFragment<T> :
         binding.paginatedSearchInitialLoadProgress.visibility = VISIBLE
     }
 
+    override fun hideContributionFab(){
+        binding.contributionFab.visibility = GONE;
+
+    }
+
+    override fun showContributionFab(){
+        binding.contributionFab.visibility = VISIBLE;
+
+    }
+
     override fun showSnackbar() {
         val anchorView= activity?.findViewById<View>(R.id.fragment_main_nav_tab_layout)
         ViewUtil.showShortSnackbar(binding.paginatedSearchResultsList, errorTextId,anchorView)

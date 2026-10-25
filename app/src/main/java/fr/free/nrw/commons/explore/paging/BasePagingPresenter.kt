@@ -36,6 +36,7 @@ abstract class BasePagingPresenter<T>(
             LoadingState.Complete -> {
                 listFooterData.postValue(emptyList())
                 view.hideInitialLoadProgress()
+                view.showContributionFab()
             }
             LoadingState.InitialLoad -> {
                 view.hideEmptyText()
@@ -44,6 +45,7 @@ abstract class BasePagingPresenter<T>(
             LoadingState.Error -> {
                 view.showSnackbar()
                 view.hideInitialLoadProgress()
+                view.showContributionFab()
                 listFooterData.postValue(listOf(FooterItem.RefreshItem))
             }
         }
