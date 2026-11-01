@@ -7,7 +7,13 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.animation.Animation
+import android.view.animation.AnimationUtils
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
@@ -17,10 +23,12 @@ import fr.free.nrw.commons.BuildConfig.COMMONS_URL
 import fr.free.nrw.commons.Media
 import fr.free.nrw.commons.R
 import fr.free.nrw.commons.ViewPagerAdapter
+import fr.free.nrw.commons.contributions.ContributionController
 import fr.free.nrw.commons.databinding.ActivityCategoryDetailsBinding
 import fr.free.nrw.commons.explore.categories.media.CategoriesMediaFragment
 import fr.free.nrw.commons.explore.categories.parent.ParentCategoriesFragment
 import fr.free.nrw.commons.explore.categories.sub.SubCategoriesFragment
+import fr.free.nrw.commons.filepicker.FilePicker
 import fr.free.nrw.commons.media.MediaDetailPagerFragment
 import fr.free.nrw.commons.media.MediaDetailProvider
 import fr.free.nrw.commons.theme.BaseActivity
@@ -30,6 +38,8 @@ import fr.free.nrw.commons.wikidata.model.WikiSite
 import fr.free.nrw.commons.wikidata.model.page.PageTitle
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.Manifest.permission
+import fr.free.nrw.commons.utils.ViewUtil.showShortToast
 
 /**
  * This activity displays details of a particular category
@@ -48,10 +58,42 @@ class CategoryDetailsActivity :
 
     private lateinit var binding: ActivityCategoryDetailsBinding
 
+    private var fabOpen: Animation? = null
+    private var fabClose: Animation? = null
+    private var rotateForward: Animation? = null
+    private var rotateBackward: Animation? = null
+    private var isFabOpen = false
+
     @Inject
     lateinit var categoryViewModelFactory: CategoryDetailsViewModel.ViewModelFactory
 
+    @Inject
+    lateinit var contributionController: ContributionController
+
     private val viewModel: CategoryDetailsViewModel by viewModels<CategoryDetailsViewModel> { categoryViewModelFactory }
+
+    private lateinit var inAppCameraLocationPermissionLauncher: ActivityResultLauncher<Array<String>>
+
+    private val galleryPickLauncherForResult =
+        registerForActivityResult(StartActivityForResult()) { result: ActivityResult ->
+            contributionController.handleActivityResultWithCallback(this) { callbacks: FilePicker.Callbacks ->
+                contributionController.onPictureReturnedFromGallery(result, this, callbacks)
+            }
+        }
+
+    private val customSelectorLauncherForResult =
+        registerForActivityResult(StartActivityForResult()) { result: ActivityResult ->
+            contributionController.handleActivityResultWithCallback(this) { callbacks: FilePicker.Callbacks ->
+                contributionController.onPictureReturnedFromCustomSelector(result, this, callbacks)
+            }
+        }
+
+    private val cameraPickLauncherForResult =
+        registerForActivityResult(StartActivityForResult()) { result: ActivityResult ->
+            contributionController.handleActivityResultWithCallback(this) { callbacks: FilePicker.Callbacks ->
+                contributionController.onPictureReturnedFromCamera(result, this, callbacks)
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +111,67 @@ class CategoryDetailsActivity :
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         setTabs()
         setPageTitle()
+        inAppCameraLocationPermissionLauncher =
+            registerForActivityResult(RequestMultiplePermissions()) { result ->
+                val areAllGranted = result.values.all { it }
+
+                if (areAllGranted) {
+                    contributionController.locationPermissionCallback?.onLocationPermissionGranted()
+                } else {
+                    this.let { currentActivity ->
+                        if (currentActivity.shouldShowRequestPermissionRationale(
+                                permission.ACCESS_FINE_LOCATION,
+                            )
+                        ) {
+                            contributionController.handleShowRationaleFlowCameraLocation(
+                                currentActivity,
+                                inAppCameraLocationPermissionLauncher, // Pass launcher
+                                cameraPickLauncherForResult,
+                            )
+                        } else {
+                            contributionController.locationPermissionCallback?.onLocationPermissionDenied(
+                                currentActivity.getString(
+                                    R.string.in_app_camera_location_permission_denied,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        initializeFabAnimations()
+        binding.fabPlus.setOnClickListener { animateFAB(isFabOpen) }
+
+        binding.fabCamera.setOnClickListener {
+            contributionController.initiateCameraPick(
+                this,
+                inAppCameraLocationPermissionLauncher,
+                cameraPickLauncherForResult,
+            )
+            animateFAB(isFabOpen)
+        }
+        binding.fabCamera.setOnLongClickListener {
+            showShortToast(this, R.string.add_contribution_from_camera)
+            true
+        }
+
+        binding.fabGallery.setOnClickListener {
+            contributionController.initiateGalleryPick(this, galleryPickLauncherForResult, true)
+            animateFAB(isFabOpen)
+        }
+        binding.fabGallery.setOnLongClickListener {
+            showShortToast(this, R.string.menu_from_gallery)
+            true
+        }
+
+        binding.fabCustomGallery.setOnClickListener {
+            contributionController.initiateCustomGalleryPickWithPermission(this, customSelectorLauncherForResult)
+            animateFAB(isFabOpen)
+        }
+        binding.fabCustomGallery.setOnLongClickListener {
+            showShortToast(this, R.string.custom_selector_title)
+            true
+        }
+
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -86,6 +189,7 @@ class CategoryDetailsActivity :
                         binding.tabLayout.visibility = View.VISIBLE
                         binding.viewPager.visibility = View.VISIBLE
                         binding.mediaContainer.visibility = View.GONE
+                        binding.fabLayout.visibility = View.VISIBLE
                     }
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
@@ -125,6 +229,44 @@ class CategoryDetailsActivity :
     }
 
     /**
+     * This method loads the animations that will be used when the user
+     * interacts with any part of the add fab
+     */
+    private fun initializeFabAnimations() {
+        fabOpen = AnimationUtils.loadAnimation(this, R.anim.fab_open)
+        fabClose = AnimationUtils.loadAnimation(this, R.anim.fab_close)
+        rotateForward = AnimationUtils.loadAnimation(this, R.anim.rotate_forward)
+        rotateBackward = AnimationUtils.loadAnimation(this, R.anim.rotate_backward)
+    }
+
+    /**
+     * This method runs the animation based if the fab is open or closed
+     */
+    private fun animateFAB(isFabOpen: Boolean) {
+        this.isFabOpen = !isFabOpen
+        if (binding.fabPlus.isShown) {
+            if (isFabOpen) {
+                binding.fabPlus.startAnimation(rotateBackward)
+                binding.fabCamera.startAnimation(fabClose)
+                binding.fabGallery.startAnimation(fabClose)
+                binding.fabCustomGallery.startAnimation(fabClose)
+                binding.fabCamera.hide()
+                binding.fabGallery.hide()
+                binding.fabCustomGallery.hide()
+            } else {
+                binding.fabPlus.startAnimation(rotateForward)
+                binding.fabCamera.startAnimation(fabOpen)
+                binding.fabGallery.startAnimation(fabOpen)
+                binding.fabCustomGallery.startAnimation(fabOpen)
+                binding.fabCamera.show()
+                binding.fabGallery.show()
+                binding.fabCustomGallery.show()
+            }
+            this.isFabOpen = !isFabOpen
+        }
+    }
+
+    /**
      * Gets the passed categoryName from the intents and displays it as the page title
      */
     private fun setPageTitle() {
@@ -140,6 +282,8 @@ class CategoryDetailsActivity :
         binding.tabLayout.visibility = View.GONE
         binding.viewPager.visibility = View.GONE
         binding.mediaContainer.visibility = View.VISIBLE
+        if (isFabOpen) animateFAB(isFabOpen)
+        binding.fabLayout.visibility = View.GONE
         if (mediaDetails == null || mediaDetails?.isVisible == false) {
             // set isFeaturedImage true for featured images, to include author field on media detail
             mediaDetails = MediaDetailPagerFragment.newInstance(false, true)

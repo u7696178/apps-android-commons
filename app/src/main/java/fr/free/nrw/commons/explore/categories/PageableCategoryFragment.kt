@@ -11,14 +11,4 @@ abstract class PageableCategoryFragment : BasePagingFragment<String>() {
             CategoryDetailsActivity.startYourself(context, it)
         }
     }
-
-    override fun hideInitialLoadProgress() {
-        super.hideInitialLoadProgress()
-        showContributionFab();
-    }
-
-    override fun showInitialLoadInProgress() {
-        super.showInitialLoadInProgress()
-        hideContributionFab();
-    }
 }
