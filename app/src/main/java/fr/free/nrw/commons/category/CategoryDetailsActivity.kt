@@ -185,6 +185,7 @@ class CategoryDetailsActivity :
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    binding.contributionFab.visibility = View.VISIBLE
                     if (supportFragmentManager.backStackEntryCount == 1) {
                         binding.tabLayout.visibility = View.VISIBLE
                         binding.viewPager.visibility = View.VISIBLE
