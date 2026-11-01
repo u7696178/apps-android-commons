@@ -82,6 +82,7 @@ class CategoryDetailsActivity :
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    binding.contributionFab.visibility = View.VISIBLE
                     if (supportFragmentManager.backStackEntryCount == 1) {
                         binding.tabLayout.visibility = View.VISIBLE
                         binding.viewPager.visibility = View.VISIBLE
@@ -140,6 +141,7 @@ class CategoryDetailsActivity :
         binding.tabLayout.visibility = View.GONE
         binding.viewPager.visibility = View.GONE
         binding.mediaContainer.visibility = View.VISIBLE
+        binding.contributionFab.visibility = View.GONE
         if (mediaDetails == null || mediaDetails?.isVisible == false) {
             // set isFeaturedImage true for featured images, to include author field on media detail
             mediaDetails = MediaDetailPagerFragment.newInstance(false, true)

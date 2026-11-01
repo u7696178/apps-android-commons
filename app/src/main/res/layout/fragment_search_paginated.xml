@@ -29,17 +29,4 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_centerInParent="true" />
-
-  <com.google.android.material.floatingactionbutton.FloatingActionButton
-    android:id="@+id/contributionFab"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:layout_alignParentEnd="true"
-    android:layout_alignParentBottom="true"
-    android:layout_margin="16dp"
-    android:clickable="true"
-    android:focusable="true"
-    android:visibility="invisible"
-    app:srcCompat="@drawable/ic_add_white_24dp" />
-
 </RelativeLayout>
